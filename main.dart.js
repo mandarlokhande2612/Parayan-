@@ -40705,7 +40705,7 @@ q=A.Zd(B.a3,A.nI(A.d([B.Ef,B.y7,A.eI("File Path: "+q,s,s,s,A.h9(s,s,B.d5,s,s,s,s
 return A.asL(A.d([A.acH(B.Sv,new A.ahI(a),s)],p),q,r)},
 $S:120}
 A.ahH.prototype={
-$0(){var s=window.open("assets/"+this.a,"_blank")
+$0(){var s=window.open(this.a,"_blank")
 A.aIk(s)},
 $S:0}
 A.ahI.prototype={
