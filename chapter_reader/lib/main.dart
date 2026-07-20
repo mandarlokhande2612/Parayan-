@@ -72,7 +72,7 @@ class LoginScreen extends StatelessWidget {
 }
 
 // ----------------------------------------------------
-// 2. HOME SCREEN WITH CSV IMPORT FEATURE
+// 2. HOME SCREEN WITH FIXED CSV IMPORT & TYPO
 // ----------------------------------------------------
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -94,7 +94,6 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     appConfig = ParayanConfig(totalMembers: 33, baseChapterForSerialOne: 1);
     
-    // Default Marathi sample names
     final List<String> initialNames = [
       "मंदार", "राहुल", "तृप्ती", "अमित", "स्नेहा", "अनिकेत", "पूजा", "सचिन", "प्रिया", "रोहित"
     ];
@@ -132,9 +131,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // ----------------------------------------------------
   // CSV FILE IMPORT FUNCTION (UTF-8 SUPPORTED)
-  // ----------------------------------------------------
   void _importNamesFromCSV() {
     html.FileUploadInputElement uploadInput = html.FileUploadInputElement();
     uploadInput.accept = '.csv,.txt';
@@ -149,7 +146,6 @@ class _HomeScreenState extends State<HomeScreen> {
         reader.readAsText(file, 'UTF-8');
         reader.onLoadEnd.listen((e) {
           String content = reader.result as String;
-          // Split by newline and remove empty spaces
           List<String> parsedNames = content
               .split(RegExp(r'\r\n|\r|\n'))
               .map((e) => e.replaceAll(',', '').trim())
@@ -206,7 +202,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return AlertDialog(
           title: Text(_currentLang == 'mr' ? 'Serial 1 साठी अध्याय निवडा' : 'Set Anchor Rule (Serial 1)'),
           content: Column(
-            mainAxisSize: MyAxisSize.min,
+            mainAxisSize: MainAxisSize.min, // FIXED TYPO HERE (MainAxisSize)
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
@@ -441,7 +437,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 12),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              mainAxisAlignment: SpaceAround,
               children: [
                 Chip(
                   avatar: const Icon(Icons.check_circle, color: Colors.green, size: 18),
@@ -587,7 +583,6 @@ class _HomeScreenState extends State<HomeScreen> {
               Wrap(
                 spacing: 8,
                 children: [
-                  // 1. IMPORT CSV BUTTON
                   ElevatedButton.icon(
                     onPressed: _importNamesFromCSV,
                     icon: const Icon(Icons.upload_file, color: Colors.white, size: 18),
@@ -597,7 +592,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
                   ),
-                  // 2. RESET ALL BUTTON
                   ElevatedButton.icon(
                     onPressed: _resetAllToPending,
                     icon: const Icon(Icons.refresh, color: Colors.white, size: 18),
