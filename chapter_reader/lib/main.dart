@@ -71,7 +71,7 @@ class LoginScreen extends StatelessWidget {
 }
 
 // ----------------------------------------------------
-// 2. HOME SCREEN WITH ALL ADVANCED FEATURES
+// 2. HOME SCREEN WITH ALL NEW ADVANCED FEATURES
 // ----------------------------------------------------
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -84,6 +84,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late ParayanConfig appConfig;
   List<Map<String, dynamic>> members = [];
   List<String> memberNames = []; 
+  List<String> memberStatuses = []; // Admin आणि User मधील स्टेटस सिंक ठेवण्यासाठी
   String _currentLang = 'mr';     
   UserRole _currentRole = UserRole.user; 
 
@@ -98,10 +99,12 @@ class _HomeScreenState extends State<HomeScreen> {
       (i) => i < initialNames.length ? initialNames[i] : "Member ${i + 1}"
     );
 
+    memberStatuses = List.generate(appConfig.totalMembers, (i) => (i % 6 == 0) ? "Completed" : "Pending");
+
     _calculateCascadingAssignments();
   }
 
-  // 1. Cascading Math Logic
+  // Cascading Math Logic
   void _calculateCascadingAssignments() {
     members = List.generate(appConfig.totalMembers, (index) {
       int serialNo = index + 1;
@@ -114,7 +117,6 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       String pdfUrl = "assets/assets/chapters/chapter_$calculatedChapter.pdf";
-      String status = (index % 6 == 0) ? "Completed" : "Pending";
 
       return {
         "id": serialNo,
@@ -122,12 +124,28 @@ class _HomeScreenState extends State<HomeScreen> {
         "chapterNumber": calculatedChapter,
         "chapterDisplay": chapterDisplay,
         "pdfUrl": pdfUrl,
-        "status": status
+        "status": memberStatuses[index]
       };
     });
   }
 
-  // 2. Admin: Serial 1 Anchor अध्याय बदलणे
+  // सर्व स्टेटस 'Pending' करण्यासाठी रिसेट बटण फंक्शनॅलिटी
+  void _resetAllToPending() {
+    setState(() {
+      for (int i = 0; i < memberStatuses.length; i++) {
+        memberStatuses[i] = "Pending";
+      }
+      _calculateCascadingAssignments();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(_currentLang == 'mr' ? 'सर्व अध्याय स्थिती Pending वर रिसेट केली गेली!' : 'All chapter statuses reset to Pending!'),
+        backgroundColor: Colors.orange,
+      ),
+    );
+  }
+
+  // Serial 1 Anchor अध्याय बदलणे
   void _showAnchorConfigurationDialog() {
     final anchorController = TextEditingController(text: appConfig.baseChapterForSerialOne.toString());
 
@@ -178,7 +196,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 3. Admin: नाव बदलण्याचा डायलॉग
+  // नाव बदलण्याचा डायलॉग
   void _showEditNameDialog(int index) {
     final nameController = TextEditingController(text: memberNames[index]);
 
@@ -214,7 +232,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 4. पेंडिंग वाचकांसाठी रिमाइंडर पाठवणे
   void _sendReminder(String name, String chapter) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -261,43 +278,90 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          _currentRole == UserRole.user 
-              ? (_currentLang == 'mr' ? 'पारायण वाचक' : 'Parayan Reader')
-              : (_currentLang == 'mr' ? 'प्रशासक पॅनेल' : 'Admin Panel'),
+  // ----------------------------------------------------
+  // HEADER WITH DATE, DAY, AND CHAPTER 33 READER HIGHLIGHT
+  // ----------------------------------------------------
+  Widget _buildTopHeaderInfo() {
+    final DateTime now = DateTime.now();
+    final List<String> weekDaysEn = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    final List<String> weekDaysMr = ['सोमवार', 'मंगळवार', 'बुधवार', 'गुरुवार', 'शुक्रवार', 'शनिवार', 'रविवार'];
+    final List<String> monthsEn = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final List<String> monthsMr = ['जानेवारी', 'फेब्रुवारी', 'मार्च', 'एप्रिल', 'मे', 'जून', 'जुलै', 'ऑगस्ट', 'सप्टेंबर', 'ऑक्टोबर', 'नोव्हेंबर', 'डिसेंबर'];
+
+    String dayName = _currentLang == 'mr' ? weekDaysMr[now.weekday - 1] : weekDaysEn[now.weekday - 1];
+    String monthName = _currentLang == 'mr' ? monthsMr[now.month - 1] : monthsEn[now.month - 1];
+    String formattedDate = "$dayName, ${now.day} $monthName ${now.year}";
+
+    // अध्याय ३३ + Summary वाचणाऱ्या सदस्याचे नाव शोधणे
+    var ch33Member = members.firstWhere(
+      (m) => m['chapterNumber'] == 33, 
+      orElse: () => {"name": "N/A", "chapterDisplay": "Chapter 33 + Summary"}
+    );
+
+    return Column(
+      children: [
+        // Date and Day Banner
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          decoration: BoxDecoration(
+            color: Colors.orange.shade100,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.calendar_today, size: 18, color: Colors.deepOrange),
+              const SizedBox(width: 8),
+              Text(
+                formattedDate,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.deepOrange),
+              ),
+            ],
+          ),
         ),
-        backgroundColor: Colors.orange,
-        foregroundColor: Colors.white,
-        actions: [
-          TextButton.icon(
-            onPressed: () => setState(() => _currentLang = _currentLang == 'mr' ? 'en' : 'mr'),
-            icon: const Icon(Icons.language, color: Colors.white),
-            label: Text(_currentLang == 'mr' ? 'English' : 'मराठी', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 10),
+
+        // Highlight Card for Chapter 33 + Summary Reader
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.amber.shade100,
+            border: Border.all(color: Colors.amber.shade800, width: 1.5),
+            borderRadius: BorderRadius.circular(8),
           ),
-          Padding(
-            padding: const EdgeInsets.only(right: 12.0, left: 4.0),
-            child: SegmentedButton<UserRole>(
-              segments: [
-                ButtonSegment(value: UserRole.user, label: Text(_currentLang == 'mr' ? 'वाचक' : 'User')),
-                ButtonSegment(value: UserRole.admin, label: Text(_currentLang == 'mr' ? 'प्रशासक' : 'Admin')),
-              ],
-              selected: {_currentRole},
-              onSelectionChanged: (newSelection) => setState(() => _currentRole = newSelection.first),
-            ),
+          child: Row(
+            children: [
+              const Icon(Icons.star, color: Colors.amber, size: 28),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _currentLang == 'mr' ? '🌟 अध्याय ३३ व सारांश वाचक:' : '🌟 Reading Chapter 33 + Summary:',
+                      style: TextStyle(fontSize: 12, color: Colors.amber.shade900, fontWeight: FontWeight.w600),
+                    ),
+                    Text(
+                      '${ch33Member['name']}',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
+                    ),
+                  ],
+                ),
+              ),
+              Chip(
+                label: const Text('Chapter 33 + Summary', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                backgroundColor: Colors.amber.shade300,
+              ),
+            ],
           ),
-        ],
-      ),
-      body: _currentRole == UserRole.user ? _buildUserView() : _buildAdminView(),
+        ),
+      ],
     );
   }
 
-  // ----------------------------------------------------
-  // PROGRESS TRACKER CARD
-  // ----------------------------------------------------
+  // Progress Tracker Card
   Widget _buildProgressTrackerCard() {
     int completedCount = members.where((m) => m['status'] == 'Completed').length;
     int pendingCount = members.length - completedCount;
@@ -338,12 +402,12 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Chip(
                   avatar: const Icon(Icons.check_circle, color: Colors.green, size: 18),
-                  label: Text(_currentLang == 'mr' ? 'पूर्ण: $completedCount' : 'Completed: $completedCount'),
+                  label: Text(_currentLang == 'mr' ? 'पूर्ण: $completedCount' : 'Completed: $completedCount', style: const TextStyle(fontWeight: FontWeight.bold)),
                   backgroundColor: Colors.green.shade50,
                 ),
                 Chip(
                   avatar: const Icon(Icons.hourglass_top, color: Colors.red, size: 18),
-                  label: Text(_currentLang == 'mr' ? 'उरलेले: $pendingCount' : 'Remaining: $pendingCount'),
+                  label: Text(_currentLang == 'mr' ? 'उरलेले: $pendingCount' : 'Remaining: $pendingCount', style: const TextStyle(fontWeight: FontWeight.bold)),
                   backgroundColor: Colors.red.shade50,
                 ),
               ],
@@ -351,6 +415,40 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          _currentRole == UserRole.user 
+              ? (_currentLang == 'mr' ? 'पारायण वाचक' : 'Parayan Reader')
+              : (_currentLang == 'mr' ? 'प्रशासक पॅनेल' : 'Admin Panel'),
+        ),
+        backgroundColor: Colors.orange,
+        foregroundColor: Colors.white,
+        actions: [
+          TextButton.icon(
+            onPressed: () => setState(() => _currentLang = _currentLang == 'mr' ? 'en' : 'mr'),
+            icon: const Icon(Icons.language, color: Colors.white),
+            label: Text(_currentLang == 'mr' ? 'English' : 'मराठी', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 12.0, left: 4.0),
+            child: SegmentedButton<UserRole>(
+              segments: [
+                ButtonSegment(value: UserRole.user, label: Text(_currentLang == 'mr' ? 'वाचक' : 'User')),
+                ButtonSegment(value: UserRole.admin, label: Text(_currentLang == 'mr' ? 'प्रशासक' : 'Admin')),
+              ],
+              selected: {_currentRole},
+              onSelectionChanged: (newSelection) => setState(() => _currentRole = newSelection.first),
+            ),
+          ),
+        ],
+      ),
+      body: _currentRole == UserRole.user ? _buildUserView() : _buildAdminView(),
     );
   }
 
@@ -363,7 +461,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(_currentLang == 'mr' ? 'सुस्वागतम, मंदार' : 'Welcome, Mandar', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+          _buildTopHeaderInfo(),
           const SizedBox(height: 16),
           
           _buildProgressTrackerCard(),
@@ -392,8 +490,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     backgroundColor: isPending ? Colors.red.shade100 : Colors.green.shade100,
                     child: Text('${member['id']}', style: TextStyle(color: isPending ? Colors.red : Colors.green, fontWeight: FontWeight.bold)),
                   ),
-                  title: Text(member['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text(member['chapterDisplay']),
+                  // NAME IN BOLD
+                  title: Text(
+                    member['name'], 
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
+                  ),
+                  // CHAPTER IN BOLD
+                  subtitle: Text(
+                    member['chapterDisplay'], 
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)
+                  ),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -408,8 +514,15 @@ class _HomeScreenState extends State<HomeScreen> {
                           onPressed: () => _sendReminder(member['name'], member['chapterDisplay']),
                           tooltip: 'Send Reminder',
                         ),
+                      // STATUS IN BOLD
                       Chip(
-                        label: Text(member['status']),
+                        label: Text(
+                          member['status'], 
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold, 
+                            color: isPending ? Colors.red.shade900 : Colors.green.shade900
+                          )
+                        ),
                         backgroundColor: isPending ? Colors.red.shade100 : Colors.green.shade100,
                       ),
                     ],
@@ -434,9 +547,27 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            _currentLang == 'mr' ? 'प्रशासक डॅशबोर्ड कॉन्फिगरेशन' : 'Admin Dashboard Controls', 
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.orange)
+          _buildTopHeaderInfo(),
+          const SizedBox(height: 16),
+
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                _currentLang == 'mr' ? 'प्रशासक डॅशबोर्ड' : 'Admin Dashboard', 
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.orange)
+              ),
+              // RESET ALL TO PENDING BUTTON
+              ElevatedButton.icon(
+                onPressed: _resetAllToPending,
+                icon: const Icon(Icons.refresh, color: Colors.white, size: 18),
+                label: Text(
+                  _currentLang == 'mr' ? 'सर्व रिसेट करा (Reset All)' : 'Reset All to Pending',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
 
@@ -472,7 +603,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 20),
 
-          // MANAGE MEMBERS LIST
           Text(
             _currentLang == 'mr' ? 'सदस्य नावे व स्टेटस व्यवस्थापन' : 'Manage Member Names & Status',
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -492,11 +622,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: ListTile(
                   leading: CircleAvatar(
                     backgroundColor: Colors.orange.shade100,
-                    child: Text('${member['id']}'),
+                    child: Text('${member['id']}', style: const TextStyle(fontWeight: FontWeight.bold)),
                   ),
+                  // NAME IN BOLD
                   title: Row(
                     children: [
-                      Text(member['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Text(
+                        member['name'], 
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
+                      ),
                       IconButton(
                         icon: const Icon(Icons.edit, size: 18, color: Colors.grey),
                         onPressed: () => _showEditNameDialog(index),
@@ -504,7 +638,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
-                  subtitle: Text(member['chapterDisplay']),
+                  // CHAPTER IN BOLD
+                  subtitle: Text(
+                    member['chapterDisplay'], 
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)
+                  ),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -516,15 +654,24 @@ class _HomeScreenState extends State<HomeScreen> {
                           label: Text(_currentLang == 'mr' ? 'रिमाइंडर' : 'Remind'),
                         ),
                       const SizedBox(width: 8),
+                      // STATUS IN BOLD DROPDOWN
                       DropdownButton<String>(
                         value: member['status'],
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold, 
+                          color: member['status'] == 'Pending' ? Colors.red : Colors.green
+                        ),
                         items: ['Pending', 'Completed'].map((String val) {
-                          return DropdownMenuItem<String>(value: val, child: Text(val));
+                          return DropdownMenuItem<String>(
+                            value: val, 
+                            child: Text(val, style: const TextStyle(fontWeight: FontWeight.bold))
+                          );
                         }).toList(),
                         onChanged: (newVal) {
                           if (newVal != null) {
                             setState(() {
-                              members[index]['status'] = newVal;
+                              memberStatuses[index] = newVal;
+                              _calculateCascadingAssignments();
                             });
                           }
                         },
