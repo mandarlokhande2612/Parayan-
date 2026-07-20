@@ -40673,7 +40673,7 @@ o=""+s
 r="Chapter "+o
 if(s===33)r="Chapter 33 + Summary"
 q=a<7?this.b[a]:"Member "+p
-return A.aE(["id",p,"name",q,"chapterNumber",s,"chapterDisplay",r,"pdfUrl","assets/chapters/chapter_"+o+".pdf","status","Pending"],t.N,t.z)},
+return A.aE(["id",p,"name",q,"chapterNumber",s,"chapterDisplay",r,"pdfUrl","assets/assets/chapters/chapter_"+o+".pdf","status","Pending"],t.N,t.z)},
 $S:322}
 A.ahG.prototype={
 $1(a){var s=this.b,r=t.E,q=A.nI(A.d([B.Sz,B.y7,new A.pF(s,B.En,B.O2,!1,B.yb,B.yc,!0,null)],r),B.bn,B.ba,B.cL)
