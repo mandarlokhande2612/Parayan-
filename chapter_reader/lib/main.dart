@@ -8,7 +8,6 @@ import 'package:firebase_database/firebase_database.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase with explicit credentials
   await Firebase.initializeApp(
     options: const FirebaseOptions(
       apiKey: "PASTE_YOUR_API_KEY_HERE",
@@ -85,7 +84,7 @@ class LoginScreen extends StatelessWidget {
   }
 }
 
-// 2. HOME SCREEN WITH REALTIME DATABASE SYNC
+// 2. HOME SCREEN WITH GUARANTEED FULL UI
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -105,7 +104,6 @@ class _HomeScreenState extends State<HomeScreen> {
     appConfig = ParayanConfig(totalMembers: 33, baseChapterForSerialOne: 1);
   }
 
-  // UPLOADS CSV DIRECTLY TO FIREBASE REALTIME DATABASE
   void _importNamesFromCSV() {
     html.FileUploadInputElement uploadInput = html.FileUploadInputElement();
     uploadInput.accept = '.csv,.txt';
@@ -137,7 +135,6 @@ class _HomeScreenState extends State<HomeScreen> {
               };
             }
 
-            // Push all 33 entries to Cloud Database
             await dbRef.set(updates);
 
             if (mounted) {
@@ -466,11 +463,24 @@ class _HomeScreenState extends State<HomeScreen> {
       body: StreamBuilder<DatabaseEvent>(
         stream: dbRef.onValue,
         builder: (context, snapshot) {
-          if (snapshot.hasError) return Center(child: Text('Database Error: ${snapshot.error}'));
-          
           List<Map<String, dynamic>> membersList = [];
 
-          if (snapshot.hasData && snapshot.data!.snapshot.value != null) {
+          // Generate fallback default 33 entries if DB is empty
+          if (!snapshot.hasData || snapshot.data!.snapshot.value == null) {
+            membersList = List.generate(33, (i) {
+              int serialNo = i + 1;
+              int rawChapterIndex = (appConfig.baseChapterForSerialOne - 1) + i;
+              int calculatedChapter = (rawChapterIndex % appConfig.totalMembers) + 1;
+              return {
+                "id": serialNo,
+                "name": "वाचक $serialNo",
+                "chapterNumber": calculatedChapter,
+                "chapterDisplay": calculatedChapter == 33 ? "अध्याय ३३ + सारांश" : "अध्याय $calculatedChapter",
+                "pdfUrl": "assets/assets/chapters/chapter_$calculatedChapter.pdf",
+                "status": "Pending"
+              };
+            });
+          } else {
             Map<dynamic, dynamic> map = snapshot.data!.snapshot.value as Map<dynamic, dynamic>;
 
             map.forEach((key, value) {
@@ -489,24 +499,6 @@ class _HomeScreenState extends State<HomeScreen> {
             });
 
             membersList.sort((a, b) => a['id'].compareTo(b['id']));
-          }
-
-          if (membersList.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text('डेटाबेसमध्ये नावे उपलब्ध नाहीत.', style: TextStyle(fontSize: 16)),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: _importNamesFromCSV,
-                    icon: const Icon(Icons.upload_file),
-                    label: const Text('CSV द्वारे ३३ नावे अपलोड करा'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
-                  ),
-                ],
-              ),
-            );
           }
 
           return _currentRole == UserRole.user ? _buildUserView(membersList) : _buildAdminView(membersList);
