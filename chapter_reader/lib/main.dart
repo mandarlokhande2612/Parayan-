@@ -72,7 +72,7 @@ class LoginScreen extends StatelessWidget {
 }
 
 // ----------------------------------------------------
-// 2. HOME SCREEN WITH FIXED CSV IMPORT & TYPO
+// 2. HOME SCREEN WITH CSV IMPORT & TYPO FIXES
 // ----------------------------------------------------
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -202,7 +202,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return AlertDialog(
           title: Text(_currentLang == 'mr' ? 'Serial 1 साठी अध्याय निवडा' : 'Set Anchor Rule (Serial 1)'),
           content: Column(
-            mainAxisSize: MainAxisSize.min, // FIXED TYPO HERE (MainAxisSize)
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
@@ -437,7 +437,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 12),
             Row(
-              mainAxisAlignment: SpaceAround,
+              mainAxisAlignment: MainAxisAlignment.spaceAround, // FIXED TYPO HERE
               children: [
                 Chip(
                   avatar: const Icon(Icons.check_circle, color: Colors.green, size: 18),
