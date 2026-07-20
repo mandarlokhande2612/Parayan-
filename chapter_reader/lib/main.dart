@@ -2,6 +2,7 @@ import 'app_strings.dart';
 import 'views.dart';
 import 'package:flutter/material.dart';
 import 'dart:html' as html;
+import 'dart:convert';
 
 void main() {
   runApp(const ParayanApp());
@@ -71,7 +72,7 @@ class LoginScreen extends StatelessWidget {
 }
 
 // ----------------------------------------------------
-// 2. HOME SCREEN WITH ALL NEW ADVANCED FEATURES
+// 2. HOME SCREEN WITH CSV IMPORT FEATURE
 // ----------------------------------------------------
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -84,7 +85,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late ParayanConfig appConfig;
   List<Map<String, dynamic>> members = [];
   List<String> memberNames = []; 
-  List<String> memberStatuses = []; // Admin आणि User मधील स्टेटस सिंक ठेवण्यासाठी
+  List<String> memberStatuses = []; 
   String _currentLang = 'mr';     
   UserRole _currentRole = UserRole.user; 
 
@@ -93,10 +94,13 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     appConfig = ParayanConfig(totalMembers: 33, baseChapterForSerialOne: 1);
     
-    final List<String> initialNames = ["Mandar", "Rahul", "Trupti", "Amit", "Sneha", "Aniket", "Pooja"];
+    // Default Marathi sample names
+    final List<String> initialNames = [
+      "मंदार", "राहुल", "तृप्ती", "अमित", "स्नेहा", "अनिकेत", "पूजा", "सचिन", "प्रिया", "रोहित"
+    ];
     memberNames = List.generate(
       appConfig.totalMembers, 
-      (i) => i < initialNames.length ? initialNames[i] : "Member ${i + 1}"
+      (i) => i < initialNames.length ? initialNames[i] : "वाचक ${i + 1}"
     );
 
     memberStatuses = List.generate(appConfig.totalMembers, (i) => (i % 6 == 0) ? "Completed" : "Pending");
@@ -104,16 +108,15 @@ class _HomeScreenState extends State<HomeScreen> {
     _calculateCascadingAssignments();
   }
 
-  // Cascading Math Logic
   void _calculateCascadingAssignments() {
     members = List.generate(appConfig.totalMembers, (index) {
       int serialNo = index + 1;
       int rawChapterIndex = (appConfig.baseChapterForSerialOne - 1) + index;
       int calculatedChapter = (rawChapterIndex % appConfig.totalMembers) + 1;
       
-      String chapterDisplay = "Chapter $calculatedChapter";
+      String chapterDisplay = "अध्याय $calculatedChapter";
       if (calculatedChapter == 33) {
-        chapterDisplay = "Chapter 33 + Summary";
+        chapterDisplay = "अध्याय ३३ + सारांश";
       }
 
       String pdfUrl = "assets/assets/chapters/chapter_$calculatedChapter.pdf";
@@ -129,7 +132,56 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // सर्व स्टेटस 'Pending' करण्यासाठी रिसेट बटण फंक्शनॅलिटी
+  // ----------------------------------------------------
+  // CSV FILE IMPORT FUNCTION (UTF-8 SUPPORTED)
+  // ----------------------------------------------------
+  void _importNamesFromCSV() {
+    html.FileUploadInputElement uploadInput = html.FileUploadInputElement();
+    uploadInput.accept = '.csv,.txt';
+    uploadInput.click();
+
+    uploadInput.onChange.listen((e) {
+      final files = uploadInput.files;
+      if (files != null && files.isNotEmpty) {
+        final file = files[0];
+        final reader = html.FileReader();
+
+        reader.readAsText(file, 'UTF-8');
+        reader.onLoadEnd.listen((e) {
+          String content = reader.result as String;
+          // Split by newline and remove empty spaces
+          List<String> parsedNames = content
+              .split(RegExp(r'\r\n|\r|\n'))
+              .map((e) => e.replaceAll(',', '').trim())
+              .where((e) => e.isNotEmpty)
+              .toList();
+
+          if (parsedNames.isNotEmpty) {
+            setState(() {
+              for (int i = 0; i < appConfig.totalMembers; i++) {
+                if (i < parsedNames.length) {
+                  memberNames[i] = parsedNames[i];
+                }
+              }
+              _calculateCascadingAssignments();
+            });
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  _currentLang == 'mr' 
+                      ? '${parsedNames.length} मराठी नावे यशस्वीरित्या अपडेट झाली!' 
+                      : '${parsedNames.length} Marathi names imported successfully!',
+                ),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        });
+      }
+    });
+  }
+
   void _resetAllToPending() {
     setState(() {
       for (int i = 0; i < memberStatuses.length; i++) {
@@ -145,7 +197,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Serial 1 Anchor अध्याय बदलणे
   void _showAnchorConfigurationDialog() {
     final anchorController = TextEditingController(text: appConfig.baseChapterForSerialOne.toString());
 
@@ -155,7 +206,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return AlertDialog(
           title: Text(_currentLang == 'mr' ? 'Serial 1 साठी अध्याय निवडा' : 'Set Anchor Rule (Serial 1)'),
           content: Column(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisSize: MyAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
@@ -196,7 +247,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // नाव बदलण्याचा डायलॉग
   void _showEditNameDialog(int index) {
     final nameController = TextEditingController(text: memberNames[index]);
 
@@ -278,29 +328,24 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ----------------------------------------------------
-  // HEADER WITH DATE, DAY, AND CHAPTER 33 READER HIGHLIGHT
-  // ----------------------------------------------------
   Widget _buildTopHeaderInfo() {
     final DateTime now = DateTime.now();
-    final List<String> weekDaysEn = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     final List<String> weekDaysMr = ['सोमवार', 'मंगळवार', 'बुधवार', 'गुरुवार', 'शुक्रवार', 'शनिवार', 'रविवार'];
-    final List<String> monthsEn = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final List<String> weekDaysEn = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     final List<String> monthsMr = ['जानेवारी', 'फेब्रुवारी', 'मार्च', 'एप्रिल', 'मे', 'जून', 'जुलै', 'ऑगस्ट', 'सप्टेंबर', 'ऑक्टोबर', 'नोव्हेंबर', 'डिसेंबर'];
+    final List<String> monthsEn = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     String dayName = _currentLang == 'mr' ? weekDaysMr[now.weekday - 1] : weekDaysEn[now.weekday - 1];
     String monthName = _currentLang == 'mr' ? monthsMr[now.month - 1] : monthsEn[now.month - 1];
     String formattedDate = "$dayName, ${now.day} $monthName ${now.year}";
 
-    // अध्याय ३३ + Summary वाचणाऱ्या सदस्याचे नाव शोधणे
     var ch33Member = members.firstWhere(
       (m) => m['chapterNumber'] == 33, 
-      orElse: () => {"name": "N/A", "chapterDisplay": "Chapter 33 + Summary"}
+      orElse: () => {"name": "N/A", "chapterDisplay": "अध्याय ३३ + सारांश"}
     );
 
     return Column(
       children: [
-        // Date and Day Banner
         Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
@@ -322,7 +367,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         const SizedBox(height: 10),
 
-        // Highlight Card for Chapter 33 + Summary Reader
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(12),
@@ -361,7 +405,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Progress Tracker Card
   Widget _buildProgressTrackerCard() {
     int completedCount = members.where((m) => m['status'] == 'Completed').length;
     int pendingCount = members.length - completedCount;
@@ -452,9 +495,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ----------------------------------------------------
-  // USER DASHBOARD VIEW
-  // ----------------------------------------------------
+  // USER VIEW
   Widget _buildUserView() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
@@ -490,16 +531,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     backgroundColor: isPending ? Colors.red.shade100 : Colors.green.shade100,
                     child: Text('${member['id']}', style: TextStyle(color: isPending ? Colors.red : Colors.green, fontWeight: FontWeight.bold)),
                   ),
-                  // NAME IN BOLD
-                  title: Text(
-                    member['name'], 
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
-                  ),
-                  // CHAPTER IN BOLD
-                  subtitle: Text(
-                    member['chapterDisplay'], 
-                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)
-                  ),
+                  title: Text(member['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  subtitle: Text(member['chapterDisplay'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -514,14 +547,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           onPressed: () => _sendReminder(member['name'], member['chapterDisplay']),
                           tooltip: 'Send Reminder',
                         ),
-                      // STATUS IN BOLD
                       Chip(
                         label: Text(
                           member['status'], 
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold, 
-                            color: isPending ? Colors.red.shade900 : Colors.green.shade900
-                          )
+                          style: TextStyle(fontWeight: FontWeight.bold, color: isPending ? Colors.red.shade900 : Colors.green.shade900)
                         ),
                         backgroundColor: isPending ? Colors.red.shade100 : Colors.green.shade100,
                       ),
@@ -536,9 +565,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ----------------------------------------------------
-  // ADMIN DASHBOARD VIEW
-  // ----------------------------------------------------
+  // ADMIN VIEW WITH IMPORT CSV BUTTON
   Widget _buildAdminView() {
     int lastChapterNum = ((appConfig.baseChapterForSerialOne + 31) % 33) + 1;
 
@@ -557,15 +584,30 @@ class _HomeScreenState extends State<HomeScreen> {
                 _currentLang == 'mr' ? 'प्रशासक डॅशबोर्ड' : 'Admin Dashboard', 
                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.orange)
               ),
-              // RESET ALL TO PENDING BUTTON
-              ElevatedButton.icon(
-                onPressed: _resetAllToPending,
-                icon: const Icon(Icons.refresh, color: Colors.white, size: 18),
-                label: Text(
-                  _currentLang == 'mr' ? 'सर्व रिसेट करा (Reset All)' : 'Reset All to Pending',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-                ),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              Wrap(
+                spacing: 8,
+                children: [
+                  // 1. IMPORT CSV BUTTON
+                  ElevatedButton.icon(
+                    onPressed: _importNamesFromCSV,
+                    icon: const Icon(Icons.upload_file, color: Colors.white, size: 18),
+                    label: Text(
+                      _currentLang == 'mr' ? 'नावे अपलोड (CSV)' : 'Import CSV',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
+                  ),
+                  // 2. RESET ALL BUTTON
+                  ElevatedButton.icon(
+                    onPressed: _resetAllToPending,
+                    icon: const Icon(Icons.refresh, color: Colors.white, size: 18),
+                    label: Text(
+                      _currentLang == 'mr' ? 'सर्व रिसेट करा' : 'Reset All',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  ),
+                ],
               ),
             ],
           ),
@@ -574,7 +616,6 @@ class _HomeScreenState extends State<HomeScreen> {
           _buildProgressTrackerCard(),
           const SizedBox(height: 16),
 
-          // SERIAL 1 ANCHOR CONTROL CARD
           Card(
             elevation: 2,
             child: Padding(
@@ -624,13 +665,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     backgroundColor: Colors.orange.shade100,
                     child: Text('${member['id']}', style: const TextStyle(fontWeight: FontWeight.bold)),
                   ),
-                  // NAME IN BOLD
                   title: Row(
                     children: [
-                      Text(
-                        member['name'], 
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
-                      ),
+                      Text(member['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                       IconButton(
                         icon: const Icon(Icons.edit, size: 18, color: Colors.grey),
                         onPressed: () => _showEditNameDialog(index),
@@ -638,11 +675,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
-                  // CHAPTER IN BOLD
-                  subtitle: Text(
-                    member['chapterDisplay'], 
-                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)
-                  ),
+                  subtitle: Text(member['chapterDisplay'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -654,18 +687,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           label: Text(_currentLang == 'mr' ? 'रिमाइंडर' : 'Remind'),
                         ),
                       const SizedBox(width: 8),
-                      // STATUS IN BOLD DROPDOWN
                       DropdownButton<String>(
                         value: member['status'],
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold, 
-                          color: member['status'] == 'Pending' ? Colors.red : Colors.green
-                        ),
+                        style: TextStyle(fontWeight: FontWeight.bold, color: member['status'] == 'Pending' ? Colors.red : Colors.green),
                         items: ['Pending', 'Completed'].map((String val) {
-                          return DropdownMenuItem<String>(
-                            value: val, 
-                            child: Text(val, style: const TextStyle(fontWeight: FontWeight.bold))
-                          );
+                          return DropdownMenuItem<String>(value: val, child: Text(val, style: const TextStyle(fontWeight: FontWeight.bold)));
                         }).toList(),
                         onChanged: (newVal) {
                           if (newVal != null) {
