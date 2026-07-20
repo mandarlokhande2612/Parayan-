@@ -71,7 +71,7 @@ class LoginScreen extends StatelessWidget {
 }
 
 // ----------------------------------------------------
-// 2. HOME SCREEN WITH ALL NEW ADVANCED FEATURES
+// 2. HOME SCREEN WITH ALL ADVANCED FEATURES
 // ----------------------------------------------------
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -83,8 +83,8 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   late ParayanConfig appConfig;
   List<Map<String, dynamic>> members = [];
-  List<String> memberNames = []; // Admin ने बदललेली नावे स्टोअर करण्यासाठी
-  String _currentLang = 'mr';     // भाषा स्टेट: 'mr' (मराठी) / 'en' (English)
+  List<String> memberNames = []; 
+  String _currentLang = 'mr';     
   UserRole _currentRole = UserRole.user; 
 
   @override
@@ -92,7 +92,6 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     appConfig = ParayanConfig(totalMembers: 33, baseChapterForSerialOne: 1);
     
-    // डीफॉल्ट ३३ नावे तयार करणे
     final List<String> initialNames = ["Mandar", "Rahul", "Trupti", "Amit", "Sneha", "Aniket", "Pooja"];
     memberNames = List.generate(
       appConfig.totalMembers, 
@@ -102,7 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _calculateCascadingAssignments();
   }
 
-  // 1. Cascading Math Logic (उदा. Serial 1 ला 11 दिल्यास ३३व्या सदस्याला १० मिळणे)
+  // 1. Cascading Math Logic
   void _calculateCascadingAssignments() {
     members = List.generate(appConfig.totalMembers, (index) {
       int serialNo = index + 1;
@@ -115,7 +114,6 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       String pdfUrl = "assets/assets/chapters/chapter_$calculatedChapter.pdf";
-      // काही डमी स्टेटस सेट करणे (चाचणीसाठी ५ सदस्य Completed दाखवणे)
       String status = (index % 6 == 0) ? "Completed" : "Pending";
 
       return {
@@ -167,7 +165,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (inputChapter > 0 && inputChapter <= appConfig.totalMembers) {
                   setState(() {
                     appConfig.baseChapterForSerialOne = inputChapter;
-                    _calculateCascadingAssignments(); // सर्व अध्याय री-कॅल्क्युलेट करा
+                    _calculateCascadingAssignments();
                   });
                   Navigator.pop(context);
                 }
@@ -180,7 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 3. Admin: सदस्याचे नाव बदलण्याचा डायलॉग (Edit Name)
+  // 3. Admin: नाव बदलण्याचा डायलॉग
   void _showEditNameDialog(int index) {
     final nameController = TextEditingController(text: memberNames[index]);
 
@@ -203,7 +201,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (nameController.text.trim().isNotEmpty) {
                   setState(() {
                     memberNames[index] = nameController.text.trim();
-                    _calculateCascadingAssignments(); // नाव अपडेट करा
+                    _calculateCascadingAssignments();
                   });
                   Navigator.pop(context);
                 }
@@ -275,14 +273,11 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Colors.orange,
         foregroundColor: Colors.white,
         actions: [
-          // भाषा बटण
           TextButton.icon(
             onPressed: () => setState(() => _currentLang = _currentLang == 'mr' ? 'en' : 'mr'),
             icon: const Icon(Icons.language, color: Colors.white),
             label: Text(_currentLang == 'mr' ? 'English' : 'मराठी', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
-
-          // रोल बटण (User / Admin)
           Padding(
             padding: const EdgeInsets.only(right: 12.0, left: 4.0),
             child: SegmentedButton<UserRole>(
@@ -301,7 +296,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ----------------------------------------------------
-  // प्रगति ट्रॅकर कार्ड विजेट (Progress Tracker Card)
+  // PROGRESS TRACKER CARD
   // ----------------------------------------------------
   Widget _buildProgressTrackerCard() {
     int completedCount = members.where((m) => m['status'] == 'Completed').length;
@@ -371,7 +366,6 @@ class _HomeScreenState extends State<HomeScreen> {
           Text(_currentLang == 'mr' ? 'सुस्वागतम, मंदार' : 'Welcome, Mandar', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
           
-          // ३. प्रगती कार्ड (Progress Tracker)
           _buildProgressTrackerCard(),
           const SizedBox(height: 16),
 
@@ -391,7 +385,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
               return Card(
                 elevation: isPending ? 3 : 1,
-                // पेंडिंग वाचक असल्यास लाईट लाल हायलाइट करणे
                 color: isPending ? Colors.red.shade50 : Colors.white,
                 margin: const EdgeInsets.symmetric(vertical: 4),
                 child: ListTile(
@@ -434,6 +427,8 @@ class _HomeScreenState extends State<HomeScreen> {
   // ADMIN DASHBOARD VIEW
   // ----------------------------------------------------
   Widget _buildAdminView() {
+    int lastChapterNum = ((appConfig.baseChapterForSerialOne + 31) % 33) + 1;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -445,11 +440,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 16),
 
-          // प्रगती कार्ड
           _buildProgressTrackerCard(),
           const SizedBox(height: 16),
 
-          // 2. SERIAL 1 ANCHOR CONTROL CARD
+          // SERIAL 1 ANCHOR CONTROL CARD
           Card(
             elevation: 2,
             child: Padding(
@@ -462,7 +456,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('Serial 1 Assigned to: Chapter ${appConfig.baseChapterForSerialOne}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                        Text('Cascading Rule: Serial 1 $\\rightarrow$ Ch ${appConfig.baseChapterForSerialOne}, Serial 33 $\\rightarrow$ Ch ${((appConfig.baseChapterForSerialOne + 31) % 33) + 1}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                        Text('Cascading Rule: Serial 1 -> Ch ${appConfig.baseChapterForSerialOne}, Serial 33 -> Ch $lastChapterNum', style: const TextStyle(color: Colors.grey, fontSize: 12)),
                       ],
                     ),
                   ),
@@ -478,7 +472,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 20),
 
-          // 1. MANAGE MEMBERS & EDIT NAMES LIST
+          // MANAGE MEMBERS LIST
           Text(
             _currentLang == 'mr' ? 'सदस्य नावे व स्टेटस व्यवस्थापन' : 'Manage Member Names & Status',
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -505,7 +499,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Text(member['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
                       IconButton(
                         icon: const Icon(Icons.edit, size: 18, color: Colors.grey),
-                        onPressed: () => _showEditNameDialog(index), // १. नाव बदलण्याचे बटण
+                        onPressed: () => _showEditNameDialog(index),
                         tooltip: 'Edit Name',
                       ),
                     ],
