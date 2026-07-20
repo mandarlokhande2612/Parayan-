@@ -2,9 +2,25 @@ import 'app_strings.dart';
 import 'views.dart';
 import 'package:flutter/material.dart';
 import 'dart:html' as html;
-import 'dart:convert';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_database/firebase_database.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase with explicit credentials
+  await Firebase.initializeApp(
+    options: const FirebaseOptions(
+      apiKey: "PASTE_YOUR_API_KEY_HERE",
+      authDomain: "parayan-app-d93ea.firebaseapp.com",
+      databaseURL: "https://parayan-app-d93ea-default-rtdb.firebaseio.com",
+      projectId: "parayan-app-d93ea",
+      storageBucket: "parayan-app-d93ea.firebasestorage.app",
+      messagingSenderId: "33806688499",
+      appId: "1:33806688499:web:75417e567eb73fc36c5786",
+    ),
+  );
+
   runApp(const ParayanApp());
 }
 
@@ -38,9 +54,7 @@ class ParayanApp extends StatelessWidget {
   }
 }
 
-// ----------------------------------------------------
 // 1. LOGIN SCREEN
-// ----------------------------------------------------
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
 
@@ -71,9 +85,7 @@ class LoginScreen extends StatelessWidget {
   }
 }
 
-// ----------------------------------------------------
-// 2. HOME SCREEN WITH CSV IMPORT & TYPO FIXES
-// ----------------------------------------------------
+// 2. HOME SCREEN WITH REALTIME DATABASE SYNC
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -82,56 +94,18 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  final DatabaseReference dbRef = FirebaseDatabase.instance.ref('members');
   late ParayanConfig appConfig;
-  List<Map<String, dynamic>> members = [];
-  List<String> memberNames = []; 
-  List<String> memberStatuses = []; 
-  String _currentLang = 'mr';     
-  UserRole _currentRole = UserRole.user; 
+  String _currentLang = 'mr';
+  UserRole _currentRole = UserRole.user;
 
   @override
   void initState() {
     super.initState();
     appConfig = ParayanConfig(totalMembers: 33, baseChapterForSerialOne: 1);
-    
-    final List<String> initialNames = [
-      "मंदार", "राहुल", "तृप्ती", "अमित", "स्नेहा", "अनिकेत", "पूजा", "सचिन", "प्रिया", "रोहित"
-    ];
-    memberNames = List.generate(
-      appConfig.totalMembers, 
-      (i) => i < initialNames.length ? initialNames[i] : "वाचक ${i + 1}"
-    );
-
-    memberStatuses = List.generate(appConfig.totalMembers, (i) => (i % 6 == 0) ? "Completed" : "Pending");
-
-    _calculateCascadingAssignments();
   }
 
-  void _calculateCascadingAssignments() {
-    members = List.generate(appConfig.totalMembers, (index) {
-      int serialNo = index + 1;
-      int rawChapterIndex = (appConfig.baseChapterForSerialOne - 1) + index;
-      int calculatedChapter = (rawChapterIndex % appConfig.totalMembers) + 1;
-      
-      String chapterDisplay = "अध्याय $calculatedChapter";
-      if (calculatedChapter == 33) {
-        chapterDisplay = "अध्याय ३३ + सारांश";
-      }
-
-      String pdfUrl = "assets/assets/chapters/chapter_$calculatedChapter.pdf";
-
-      return {
-        "id": serialNo,
-        "name": memberNames[index],
-        "chapterNumber": calculatedChapter,
-        "chapterDisplay": chapterDisplay,
-        "pdfUrl": pdfUrl,
-        "status": memberStatuses[index]
-      };
-    });
-  }
-
-  // CSV FILE IMPORT FUNCTION (UTF-8 SUPPORTED)
+  // UPLOADS CSV DIRECTLY TO FIREBASE REALTIME DATABASE
   void _importNamesFromCSV() {
     html.FileUploadInputElement uploadInput = html.FileUploadInputElement();
     uploadInput.accept = '.csv,.txt';
@@ -144,7 +118,7 @@ class _HomeScreenState extends State<HomeScreen> {
         final reader = html.FileReader();
 
         reader.readAsText(file, 'UTF-8');
-        reader.onLoadEnd.listen((e) {
+        reader.onLoadEnd.listen((e) async {
           String content = reader.result as String;
           List<String> parsedNames = content
               .split(RegExp(r'\r\n|\r|\n'))
@@ -153,44 +127,60 @@ class _HomeScreenState extends State<HomeScreen> {
               .toList();
 
           if (parsedNames.isNotEmpty) {
-            setState(() {
-              for (int i = 0; i < appConfig.totalMembers; i++) {
-                if (i < parsedNames.length) {
-                  memberNames[i] = parsedNames[i];
-                }
-              }
-              _calculateCascadingAssignments();
-            });
+            Map<String, dynamic> updates = {};
+            for (int i = 0; i < appConfig.totalMembers; i++) {
+              String nameToSave = (i < parsedNames.length) ? parsedNames[i] : "वाचक ${i + 1}";
+              updates['${i + 1}'] = {
+                'id': i + 1,
+                'name': nameToSave,
+                'status': 'Pending'
+              };
+            }
 
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  _currentLang == 'mr' 
-                      ? '${parsedNames.length} मराठी नावे यशस्वीरित्या अपडेट झाली!' 
-                      : '${parsedNames.length} Marathi names imported successfully!',
+            // Push all 33 entries to Cloud Database
+            await dbRef.set(updates);
+
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    _currentLang == 'mr'
+                        ? '${parsedNames.length} मराठी नावे क्लॉडवर यशस्वीरित्या अपडेट झाली!'
+                        : '${parsedNames.length} Marathi names uploaded to cloud!',
+                  ),
+                  backgroundColor: Colors.green,
                 ),
-                backgroundColor: Colors.green,
-              ),
-            );
+              );
+            }
           }
         });
       }
     });
   }
 
-  void _resetAllToPending() {
-    setState(() {
-      for (int i = 0; i < memberStatuses.length; i++) {
-        memberStatuses[i] = "Pending";
-      }
-      _calculateCascadingAssignments();
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(_currentLang == 'mr' ? 'सर्व अध्याय स्थिती Pending वर रिसेट केली गेली!' : 'All chapter statuses reset to Pending!'),
-        backgroundColor: Colors.orange,
-      ),
-    );
+  void _resetAllToPending() async {
+    Map<String, dynamic> updates = {};
+    for (int i = 1; i <= appConfig.totalMembers; i++) {
+      updates['$i/status'] = 'Pending';
+    }
+    await dbRef.update(updates);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_currentLang == 'mr' ? 'सर्व अध्याय स्थिती Pending वर रिसेट केली गेली!' : 'All chapter statuses reset to Pending!'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    }
+  }
+
+  void _updateMemberStatusInDb(int id, String status) async {
+    await dbRef.child('$id').update({'status': status});
+  }
+
+  void _updateMemberNameInDb(int id, String newName) async {
+    await dbRef.child('$id').update({'name': newName});
   }
 
   void _showAnchorConfigurationDialog() {
@@ -206,17 +196,17 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                _currentLang == 'mr' 
-                  ? 'Serial 1 साठी जो अध्याय निवडाल, त्यानुसार उर्वरित ३३ सदस्यांचे अध्याय आपोआप बदलतील.' 
-                  : 'Enter chapter for Serial 1. Rest will automatically adjust in cascading order.',
-                style: const TextStyle(fontSize: 13, color: Colors.grey)
+                _currentLang == 'mr'
+                    ? 'Serial 1 साठी जो अध्याय निवडाल, त्यानुसार उर्वरित ३३ सदस्यांचे अध्याय आपोआप बदलतील.'
+                    : 'Enter chapter for Serial 1. Rest will automatically adjust in cascading order.',
+                style: const TextStyle(fontSize: 13, color: Colors.grey),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: anchorController,
                 decoration: InputDecoration(
-                  labelText: _currentLang == 'mr' ? 'Serial 1 चा अध्याय नंबर' : 'Chapter for Serial No 1', 
-                  border: const OutlineInputBorder()
+                  labelText: _currentLang == 'mr' ? 'Serial 1 चा अध्याय नंबर' : 'Chapter for Serial No 1',
+                  border: const OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.number,
               ),
@@ -230,7 +220,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (inputChapter > 0 && inputChapter <= appConfig.totalMembers) {
                   setState(() {
                     appConfig.baseChapterForSerialOne = inputChapter;
-                    _calculateCascadingAssignments();
                   });
                   Navigator.pop(context);
                 }
@@ -243,14 +232,14 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _showEditNameDialog(int index) {
-    final nameController = TextEditingController(text: memberNames[index]);
+  void _showEditNameDialog(int id, String currentName) {
+    final nameController = TextEditingController(text: currentName);
 
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('${_currentLang == 'mr' ? 'नाव बदला' : 'Edit Name'} (Serial ${index + 1})'),
+          title: Text('${_currentLang == 'mr' ? 'नाव बदला' : 'Edit Name'} (Serial $id)'),
           content: TextField(
             controller: nameController,
             decoration: InputDecoration(
@@ -263,10 +252,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ElevatedButton(
               onPressed: () {
                 if (nameController.text.trim().isNotEmpty) {
-                  setState(() {
-                    memberNames[index] = nameController.text.trim();
-                    _calculateCascadingAssignments();
-                  });
+                  _updateMemberNameInDb(id, nameController.text.trim());
                   Navigator.pop(context);
                 }
               },
@@ -281,8 +267,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void _sendReminder(String name, String chapter) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(_currentLang == 'mr' 
-            ? '$name यांना $chapter पूर्ण करण्यासाठी रिमाइंडर पाठवला!' 
+        content: Text(_currentLang == 'mr'
+            ? '$name यांना $chapter पूर्ण करण्यासाठी रिमाइंडर पाठवला!'
             : 'Reminder sent to $name for $chapter!'),
         backgroundColor: Colors.orange,
       ),
@@ -324,7 +310,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildTopHeaderInfo() {
+  Widget _buildTopHeaderInfo(List<Map<String, dynamic>> members) {
     final DateTime now = DateTime.now();
     final List<String> weekDaysMr = ['सोमवार', 'मंगळवार', 'बुधवार', 'गुरुवार', 'शुक्रवार', 'शनिवार', 'रविवार'];
     final List<String> weekDaysEn = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -336,8 +322,8 @@ class _HomeScreenState extends State<HomeScreen> {
     String formattedDate = "$dayName, ${now.day} $monthName ${now.year}";
 
     var ch33Member = members.firstWhere(
-      (m) => m['chapterNumber'] == 33, 
-      orElse: () => {"name": "N/A", "chapterDisplay": "अध्याय ३३ + सारांश"}
+      (m) => m['chapterNumber'] == 33,
+      orElse: () => {"name": "N/A", "chapterDisplay": "अध्याय ३३ + सारांश"},
     );
 
     return Column(
@@ -345,24 +331,17 @@ class _HomeScreenState extends State<HomeScreen> {
         Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-          decoration: BoxDecoration(
-            color: Colors.orange.shade100,
-            borderRadius: BorderRadius.circular(8),
-          ),
+          decoration: BoxDecoration(color: Colors.orange.shade100, borderRadius: BorderRadius.circular(8)),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Icon(Icons.calendar_today, size: 18, color: Colors.deepOrange),
               const SizedBox(width: 8),
-              Text(
-                formattedDate,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.deepOrange),
-              ),
+              Text(formattedDate, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.deepOrange)),
             ],
           ),
         ),
         const SizedBox(height: 10),
-
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(12),
@@ -383,10 +362,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       _currentLang == 'mr' ? '🌟 अध्याय ३३ व सारांश वाचक:' : '🌟 Reading Chapter 33 + Summary:',
                       style: TextStyle(fontSize: 12, color: Colors.amber.shade900, fontWeight: FontWeight.w600),
                     ),
-                    Text(
-                      '${ch33Member['name']}',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
-                    ),
+                    Text('${ch33Member['name']}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black)),
                   ],
                 ),
               ),
@@ -401,10 +377,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildProgressTrackerCard() {
+  Widget _buildProgressTrackerCard(List<Map<String, dynamic>> members) {
     int completedCount = members.where((m) => m['status'] == 'Completed').length;
     int pendingCount = members.length - completedCount;
-    double progressRatio = completedCount / members.length;
+    double progressRatio = members.isEmpty ? 0 : completedCount / members.length;
 
     return Card(
       elevation: 3,
@@ -437,7 +413,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 12),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround, // FIXED TYPO HERE
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 Chip(
                   avatar: const Icon(Icons.check_circle, color: Colors.green, size: 18),
@@ -462,7 +438,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          _currentRole == UserRole.user 
+          _currentRole == UserRole.user
               ? (_currentLang == 'mr' ? 'पारायण वाचक' : 'Parayan Reader')
               : (_currentLang == 'mr' ? 'प्रशासक पॅनेल' : 'Admin Panel'),
         ),
@@ -487,27 +463,72 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: _currentRole == UserRole.user ? _buildUserView() : _buildAdminView(),
+      body: StreamBuilder<DatabaseEvent>(
+        stream: dbRef.onValue,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) return Center(child: Text('Database Error: ${snapshot.error}'));
+          
+          List<Map<String, dynamic>> membersList = [];
+
+          if (snapshot.hasData && snapshot.data!.snapshot.value != null) {
+            Map<dynamic, dynamic> map = snapshot.data!.snapshot.value as Map<dynamic, dynamic>;
+
+            map.forEach((key, value) {
+              int serialNo = value['id'] ?? int.parse(key.toString());
+              int rawChapterIndex = (appConfig.baseChapterForSerialOne - 1) + (serialNo - 1);
+              int calculatedChapter = (rawChapterIndex % appConfig.totalMembers) + 1;
+
+              membersList.add({
+                "id": serialNo,
+                "name": value['name'] ?? "वाचक $serialNo",
+                "chapterNumber": calculatedChapter,
+                "chapterDisplay": calculatedChapter == 33 ? "अध्याय ३३ + सारांश" : "अध्याय $calculatedChapter",
+                "pdfUrl": "assets/assets/chapters/chapter_$calculatedChapter.pdf",
+                "status": value['status'] ?? "Pending"
+              });
+            });
+
+            membersList.sort((a, b) => a['id'].compareTo(b['id']));
+          }
+
+          if (membersList.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text('डेटाबेसमध्ये नावे उपलब्ध नाहीत.', style: TextStyle(fontSize: 16)),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: _importNamesFromCSV,
+                    icon: const Icon(Icons.upload_file),
+                    label: const Text('CSV द्वारे ३३ नावे अपलोड करा'),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return _currentRole == UserRole.user ? _buildUserView(membersList) : _buildAdminView(membersList);
+        },
+      ),
     );
   }
 
   // USER VIEW
-  Widget _buildUserView() {
+  Widget _buildUserView(List<Map<String, dynamic>> members) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildTopHeaderInfo(),
-          const SizedBox(height: 16),
-          
-          _buildProgressTrackerCard(),
+          _buildTopHeaderInfo(members),
           const SizedBox(height: 16),
 
-          Text(
-            _currentLang == 'mr' ? 'सक्रिय वाचन असाइनमेंट्स' : 'Active Reading Assignments', 
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)
-          ),
+          _buildProgressTrackerCard(members),
+          const SizedBox(height: 16),
+
+          Text(_currentLang == 'mr' ? 'सक्रिय वाचन असाइनमेंट्स' : 'Active Reading Assignments', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
 
           ListView.builder(
@@ -545,8 +566,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       Chip(
                         label: Text(
-                          member['status'], 
-                          style: TextStyle(fontWeight: FontWeight.bold, color: isPending ? Colors.red.shade900 : Colors.green.shade900)
+                          member['status'],
+                          style: TextStyle(fontWeight: FontWeight.bold, color: isPending ? Colors.red.shade900 : Colors.green.shade900),
                         ),
                         backgroundColor: isPending ? Colors.red.shade100 : Colors.green.shade100,
                       ),
@@ -561,8 +582,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ADMIN VIEW WITH IMPORT CSV BUTTON
-  Widget _buildAdminView() {
+  // ADMIN VIEW WITH CLOUD CSV IMPORT
+  Widget _buildAdminView(List<Map<String, dynamic>> members) {
     int lastChapterNum = ((appConfig.baseChapterForSerialOne + 31) % 33) + 1;
 
     return SingleChildScrollView(
@@ -570,16 +591,13 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildTopHeaderInfo(),
+          _buildTopHeaderInfo(members),
           const SizedBox(height: 16),
 
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                _currentLang == 'mr' ? 'प्रशासक डॅशबोर्ड' : 'Admin Dashboard', 
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.orange)
-              ),
+              Text(_currentLang == 'mr' ? 'प्रशासक डॅशबोर्ड' : 'Admin Dashboard', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.orange)),
               Wrap(
                 spacing: 8,
                 children: [
@@ -607,7 +625,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 16),
 
-          _buildProgressTrackerCard(),
+          _buildProgressTrackerCard(members),
           const SizedBox(height: 16),
 
           Card(
@@ -638,10 +656,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 20),
 
-          Text(
-            _currentLang == 'mr' ? 'सदस्य नावे व स्टेटस व्यवस्थापन' : 'Manage Member Names & Status',
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
+          Text(_currentLang == 'mr' ? 'सदस्य नावे व स्टेटस व्यवस्थापन' : 'Manage Member Names & Status', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
 
           ListView.builder(
@@ -664,7 +679,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Text(member['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                       IconButton(
                         icon: const Icon(Icons.edit, size: 18, color: Colors.grey),
-                        onPressed: () => _showEditNameDialog(index),
+                        onPressed: () => _showEditNameDialog(member['id'], member['name']),
                         tooltip: 'Edit Name',
                       ),
                     ],
@@ -689,10 +704,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         }).toList(),
                         onChanged: (newVal) {
                           if (newVal != null) {
-                            setState(() {
-                              memberStatuses[index] = newVal;
-                              _calculateCascadingAssignments();
-                            });
+                            _updateMemberStatusInDb(member['id'], newVal);
                           }
                         },
                       ),
