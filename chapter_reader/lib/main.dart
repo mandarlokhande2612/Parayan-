@@ -1,5 +1,3 @@
-import 'app_strings.dart';
-import 'views.dart';
 import 'package:flutter/material.dart';
 import 'dart:html' as html;
 import 'package:firebase_core/firebase_core.dart';
@@ -66,7 +64,11 @@ class LoginScreen extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('Parayan Reader', textAlign: TextAlign.center, style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.orange)),
+            const Text(
+              'Parayan Reader',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.orange),
+            ),
             const SizedBox(height: 40),
             const TextField(decoration: InputDecoration(labelText: 'Mobile Number', border: OutlineInputBorder(), prefixIcon: Icon(Icons.phone))),
             const SizedBox(height: 16),
@@ -84,7 +86,7 @@ class LoginScreen extends StatelessWidget {
   }
 }
 
-// 2. HOME SCREEN WITH GUARANTEED FULL UI
+// 2. HOME SCREEN
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -465,8 +467,50 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (context, snapshot) {
           List<Map<String, dynamic>> membersList = [];
 
-          // Generate fallback default 33 entries if DB is empty
-          if (!snapshot.hasData || snapshot.data!.snapshot.value == null) {
+          if (snapshot.hasData && snapshot.data!.snapshot.value != null) {
+            final rawData = snapshot.data!.snapshot.value;
+
+            // Handle when Firebase returns data as a Map or as a List
+            if (rawData is Map) {
+              rawData.forEach((key, value) {
+                if (value != null) {
+                  int serialNo = value['id'] ?? int.tryParse(key.toString()) ?? 1;
+                  int rawChapterIndex = (appConfig.baseChapterForSerialOne - 1) + (serialNo - 1);
+                  int calculatedChapter = (rawChapterIndex % appConfig.totalMembers) + 1;
+
+                  membersList.add({
+                    "id": serialNo,
+                    "name": value['name'] ?? "वाचक $serialNo",
+                    "chapterNumber": calculatedChapter,
+                    "chapterDisplay": calculatedChapter == 33 ? "अध्याय ३३ + सारांश" : "अध्याय $calculatedChapter",
+                    "pdfUrl": "assets/assets/chapters/chapter_$calculatedChapter.pdf",
+                    "status": value['status'] ?? "Pending"
+                  });
+                }
+              });
+            } else if (rawData is List) {
+              for (int i = 0; i < rawData.length; i++) {
+                var value = rawData[i];
+                if (value != null) {
+                  int serialNo = value['id'] ?? (i + 1);
+                  int rawChapterIndex = (appConfig.baseChapterForSerialOne - 1) + (serialNo - 1);
+                  int calculatedChapter = (rawChapterIndex % appConfig.totalMembers) + 1;
+
+                  membersList.add({
+                    "id": serialNo,
+                    "name": value['name'] ?? "वाचक $serialNo",
+                    "chapterNumber": calculatedChapter,
+                    "chapterDisplay": calculatedChapter == 33 ? "अध्याय ३३ + सारांश" : "अध्याय $calculatedChapter",
+                    "pdfUrl": "assets/assets/chapters/chapter_$calculatedChapter.pdf",
+                    "status": value['status'] ?? "Pending"
+                  });
+                }
+              }
+            }
+          }
+
+          // Fallback if list is empty
+          if (membersList.isEmpty) {
             membersList = List.generate(33, (i) {
               int serialNo = i + 1;
               int rawChapterIndex = (appConfig.baseChapterForSerialOne - 1) + i;
@@ -480,26 +524,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 "status": "Pending"
               };
             });
-          } else {
-            Map<dynamic, dynamic> map = snapshot.data!.snapshot.value as Map<dynamic, dynamic>;
-
-            map.forEach((key, value) {
-              int serialNo = value['id'] ?? int.parse(key.toString());
-              int rawChapterIndex = (appConfig.baseChapterForSerialOne - 1) + (serialNo - 1);
-              int calculatedChapter = (rawChapterIndex % appConfig.totalMembers) + 1;
-
-              membersList.add({
-                "id": serialNo,
-                "name": value['name'] ?? "वाचक $serialNo",
-                "chapterNumber": calculatedChapter,
-                "chapterDisplay": calculatedChapter == 33 ? "अध्याय ३३ + सारांश" : "अध्याय $calculatedChapter",
-                "pdfUrl": "assets/assets/chapters/chapter_$calculatedChapter.pdf",
-                "status": value['status'] ?? "Pending"
-              });
-            });
-
-            membersList.sort((a, b) => a['id'].compareTo(b['id']));
           }
+
+          membersList.sort((a, b) => a['id'].compareTo(b['id']));
 
           return _currentRole == UserRole.user ? _buildUserView(membersList) : _buildAdminView(membersList);
         },
@@ -516,13 +543,10 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           _buildTopHeaderInfo(members),
           const SizedBox(height: 16),
-
           _buildProgressTrackerCard(members),
           const SizedBox(height: 16),
-
           Text(_currentLang == 'mr' ? 'सक्रिय वाचन असाइनमेंट्स' : 'Active Reading Assignments', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
-
           ListView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -574,7 +598,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ADMIN VIEW WITH CLOUD CSV IMPORT
+  // ADMIN VIEW
   Widget _buildAdminView(List<Map<String, dynamic>> members) {
     int lastChapterNum = ((appConfig.baseChapterForSerialOne + 31) % 33) + 1;
 
@@ -585,7 +609,6 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           _buildTopHeaderInfo(members),
           const SizedBox(height: 16),
-
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -616,10 +639,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           const SizedBox(height: 16),
-
           _buildProgressTrackerCard(members),
           const SizedBox(height: 16),
-
           Card(
             elevation: 2,
             child: Padding(
@@ -647,10 +668,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(height: 20),
-
           Text(_currentLang == 'mr' ? 'सदस्य नावे व स्टेटस व्यवस्थापन' : 'Manage Member Names & Status', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
-
           ListView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
