@@ -1,5 +1,5 @@
 name: chapter_reader
-description: "A new Flutter project."
+description: "A Flutter web app for Sadguru Shri Lakshmikant Maharaj Parayan."
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -12,9 +12,10 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.8
 
-  # Firebase packages for Realtime Sync
+  # Firebase packages for Realtime Sync & Mobile OTP Authentication
   firebase_core: ^3.10.0
   firebase_database: ^11.3.0
+  firebase_auth: ^5.4.0
 
 dev_dependencies:
   flutter_test:
@@ -27,3 +28,4 @@ flutter:
 
   assets:
     - assets/chapters/
+    - assets/images/
